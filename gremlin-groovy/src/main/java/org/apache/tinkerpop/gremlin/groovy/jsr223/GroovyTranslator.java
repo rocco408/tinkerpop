@@ -62,22 +62,23 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
 
     private GroovyTranslator(final String traversalSource, final TypeTranslator typeTranslator) {
         this.traversalSource = traversalSource;
-        this.typeTranslator = new DefaultTypeTranslator(traversalSource, typeTranslator);
+        this.typeTranslator = typeTranslator;
     }
 
     public static final GroovyTranslator of(final String traversalSource) {
-        return of(traversalSource, TypeTranslator.identity());
+        return of(traversalSource, null);
     }
 
     public static final GroovyTranslator of(final String traversalSource, final TypeTranslator typeTranslator) {
-        return new GroovyTranslator(traversalSource, Optional.ofNullable(typeTranslator).orElse(TypeTranslator.identity()));
+        return new GroovyTranslator(traversalSource,
+                Optional.ofNullable(typeTranslator).orElseGet(DefaultTypeTranslator::new));
     }
 
     ///////
 
     @Override
     public String translate(final Bytecode bytecode) {
-        return typeTranslator.apply(bytecode).toString();
+        return typeTranslator.apply(traversalSource, bytecode).toString();
     }
 
     @Override
@@ -100,40 +101,16 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
      */
     public static class DefaultTypeTranslator implements TypeTranslator {
 
-        private final String traversalSource;
-        private TypeTranslator customTypeTranslator;
-
-        public DefaultTypeTranslator() {
-            this("__", TypeTranslator.identity());
-        }
-
-        public DefaultTypeTranslator(final String traversalSource) {
-            this(traversalSource, TypeTranslator.identity());
-        }
-
-        public DefaultTypeTranslator(final String traversalSource, final TypeTranslator customTypeTranslator) {
-            this.traversalSource = traversalSource;
-            this.customTypeTranslator = customTypeTranslator;
-        }
-
         @Override
-        public Object apply(final Object o) {
+        public Object apply(final String traversalSource, final Object o) {
             if (o instanceof Bytecode)
                 return internalTranslate(traversalSource, (Bytecode) o);
             else
                 return convertToString(o);
         }
 
-        protected String convertToString(final Object o) {
-
-            final Object object = customTypeTranslator.apply(o);
-
-            // an object that is Handled means that the "custom" TypeTranslator figured out how to convert the
-            // object to a string and it should be used as-is, otherwise it gets passed down the line through the normal
-            // process
-            if (object instanceof Handled)
-                return ((Handled) object).getTranslation();
-            else if (object instanceof Bytecode.Binding)
+        protected String convertToString(final Object object) {
+            if (object instanceof Bytecode.Binding)
                 return ((Bytecode.Binding) object).variable();
             else if (object instanceof Bytecode)
                 return internalTranslate("__", (Bytecode) object);
@@ -235,7 +212,7 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
                 return null == object ? "null" : object.toString();
         }
 
-        private String internalTranslate(final String start, final Bytecode bytecode) {
+        protected String internalTranslate(final String start, final Bytecode bytecode) {
             final StringBuilder traversalScript = new StringBuilder(start);
             for (final Bytecode.Instruction instruction : bytecode.getInstructions()) {
                 final String methodName = instruction.getOperator();
@@ -253,7 +230,7 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
             return traversalScript.toString();
         }
 
-        private StringBuilder convertPToString(final P p, final StringBuilder current) {
+        protected StringBuilder convertPToString(final P p, final StringBuilder current) {
             if (p instanceof TextP) return convertTextPToString((TextP) p, current);
             if (p instanceof ConnectiveP) {
                 final List<P<?>> list = ((ConnectiveP) p).getPredicates();
@@ -268,7 +245,7 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
             return current;
         }
 
-        private StringBuilder convertTextPToString(final TextP p, final StringBuilder current) {
+        protected StringBuilder convertTextPToString(final TextP p, final StringBuilder current) {
             current.append("TextP.").append(p.getBiPredicate().toString()).append("(").append(convertToString(p.getValue())).append(")");
             return current;
         }
