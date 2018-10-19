@@ -62,7 +62,7 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
 
     private GroovyTranslator(final String traversalSource, final TypeTranslator typeTranslator) {
         this.traversalSource = traversalSource;
-        this.typeTranslator = typeTranslator;
+        this.typeTranslator = new DefaultTypeTranslator(traversalSource, typeTranslator);
     }
 
     public static final GroovyTranslator of(final String traversalSource) {
@@ -77,7 +77,7 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
 
     @Override
     public String translate(final Bytecode bytecode) {
-        return this.internalTranslate(this.traversalSource, bytecode);
+        return typeTranslator.apply(bytecode).toString();
     }
 
     @Override
@@ -95,153 +95,182 @@ public final class GroovyTranslator implements Translator.ScriptTranslator {
         return this.traversalSource;
     }
 
-    ///////
+    /**
+     * Performs standard type translation for the TinkerPop types to Groovy.
+     */
+    public static class DefaultTypeTranslator implements TypeTranslator {
 
-    private String internalTranslate(final String start, final Bytecode bytecode) {
-        final StringBuilder traversalScript = new StringBuilder(start);
-        for (final Bytecode.Instruction instruction : bytecode.getInstructions()) {
-            final String methodName = instruction.getOperator();
-            if (0 == instruction.getArguments().length)
-                traversalScript.append(".").append(methodName).append("()");
-            else {
-                traversalScript.append(".");
-                String temp = methodName + "(";
-                for (final Object object : instruction.getArguments()) {
-                    temp = temp + convertToString(object) + ",";
-                }
-                traversalScript.append(temp.substring(0, temp.length() - 1)).append(")");
-            }
+        private final String traversalSource;
+        private TypeTranslator customTypeTranslator;
+
+        public DefaultTypeTranslator() {
+            this("__", TypeTranslator.identity());
         }
-        return traversalScript.toString();
-    }
 
-    private String convertToString(final Object o) {
-        // a TypeTranslator that returns Handled means that the typetranslator figure out how to convert the
-        // object to a string and it should be used as-is, otherwise it gets passed down the line through the normal
-        // process
-        final Object object = typeTranslator.apply(o);
+        public DefaultTypeTranslator(final String traversalSource) {
+            this(traversalSource, TypeTranslator.identity());
+        }
 
-        if (object instanceof Handled)
-            return ((Handled) object).getTranslation();
-        else if (object instanceof Bytecode.Binding)
-            return ((Bytecode.Binding) object).variable();
-        else if (object instanceof Bytecode)
-            return this.internalTranslate("__", (Bytecode) object);
-        else if (object instanceof Traversal)
-            return convertToString(((Traversal) object).asAdmin().getBytecode());
-        else if (object instanceof String) {
-            return (((String) object).contains("\"") ? "\"\"\"" + StringEscapeUtils.escapeJava((String) object) + "\"\"\"" : "\"" + StringEscapeUtils.escapeJava((String) object) + "\"")
-                    .replace("$", "\\$");
-        } else if (object instanceof Set) {
-            final Set<String> set = new HashSet<>(((Set) object).size());
-            for (final Object item : (Set) object) {
-                set.add(convertToString(item));
-            }
-            return set.toString() + " as Set";
-        } else if (object instanceof List) {
-            final List<String> list = new ArrayList<>(((List) object).size());
-            for (final Object item : (List) object) {
-                list.add(convertToString(item));
-            }
-            return list.toString();
-        } else if (object instanceof Map) {
-            final StringBuilder map = new StringBuilder("[");
-            for (final Map.Entry<?, ?> entry : ((Map<?, ?>) object).entrySet()) {
-                map.append("(").
-                        append(convertToString(entry.getKey())).
-                        append("):(").
-                        append(convertToString(entry.getValue())).
-                        append("),");
-            }
+        public DefaultTypeTranslator(final String traversalSource, final TypeTranslator customTypeTranslator) {
+            this.traversalSource = traversalSource;
+            this.customTypeTranslator = customTypeTranslator;
+        }
 
-            // only need to remove this last bit if entries were added
-            if (!((Map<?, ?>) object).isEmpty())
-                map.deleteCharAt(map.length() - 1);
-
-            return map.append("]").toString();
-        } else if (object instanceof Long)
-            return object + "L";
-        else if (object instanceof Double)
-            return object + "d";
-        else if (object instanceof Float)
-            return object + "f";
-        else if (object instanceof Integer)
-            return "(int) " + object;
-        else if (object instanceof Class)
-            return ((Class) object).getCanonicalName();
-        else if (object instanceof Timestamp)
-            return "new java.sql.Timestamp(" + ((Timestamp) object).getTime() + ")";
-        else if (object instanceof Date)
-            return "new java.util.Date(" + ((Date) object).getTime() + ")";
-        else if (object instanceof UUID)
-            return "java.util.UUID.fromString('" + object.toString() + "')";
-        else if (object instanceof P)
-            return convertPToString((P) object, new StringBuilder()).toString();
-        else if (object instanceof SackFunctions.Barrier)
-            return "SackFunctions.Barrier." + object.toString();
-        else if (object instanceof VertexProperty.Cardinality)
-            return "VertexProperty.Cardinality." + object.toString();
-        else if (object instanceof TraversalOptionParent.Pick)
-            return "TraversalOptionParent.Pick." + object.toString();
-        else if (object instanceof Enum)
-            return ((Enum) object).getDeclaringClass().getSimpleName() + "." + object.toString();
-        else if (object instanceof Element) {
-            if (object instanceof Vertex) {
-                final Vertex vertex = (Vertex) object;
-                return "new org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex(" +
-                        convertToString(vertex.id()) + "," +
-                        convertToString(vertex.label()) + ", Collections.emptyMap())";
-            } else if (object instanceof Edge) {
-                final Edge edge = (Edge) object;
-                return "new org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge(" +
-                        convertToString(edge.id()) + "," +
-                        convertToString(edge.label()) + "," +
-                        "Collections.emptyMap()," +
-                        convertToString(edge.outVertex().id()) + "," +
-                        convertToString(edge.outVertex().label()) + "," +
-                        convertToString(edge.inVertex().id()) + "," +
-                        convertToString(edge.inVertex().label()) + ")";
-            } else {// VertexProperty
-                final VertexProperty vertexProperty = (VertexProperty) object;
-                return "new org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertexProperty(" +
-                        convertToString(vertexProperty.id()) + "," +
-                        convertToString(vertexProperty.label()) + "," +
-                        convertToString(vertexProperty.value()) + "," +
-                        "Collections.emptyMap()," +
-                        convertToString(vertexProperty.element()) + ")";
-            }
-        } else if (object instanceof Lambda) {
-            final String lambdaString = ((Lambda) object).getLambdaScript().trim();
-            return lambdaString.startsWith("{") ? lambdaString : "{" + lambdaString + "}";
-        } else if (object instanceof TraversalStrategyProxy) {
-            final TraversalStrategyProxy proxy = (TraversalStrategyProxy) object;
-            if (proxy.getConfiguration().isEmpty())
-                return proxy.getStrategyClass().getCanonicalName() + ".instance()";
+        @Override
+        public Object apply(final Object o) {
+            if (o instanceof Bytecode)
+                return internalTranslate(traversalSource, (Bytecode) o);
             else
-                return proxy.getStrategyClass().getCanonicalName() + ".create(new org.apache.commons.configuration.MapConfiguration(" + convertToString(ConfigurationConverter.getMap(proxy.getConfiguration())) + "))";
-        } else if (object instanceof TraversalStrategy) {
-            return convertToString(new TraversalStrategyProxy(((TraversalStrategy) object)));
-        } else
-            return null == object ? "null" : object.toString();
-    }
+                return convertToString(o);
+        }
 
-    private StringBuilder convertPToString(final P p, final StringBuilder current) {
-        if (p instanceof TextP) return convertTextPToString((TextP) p, current);
-        if (p instanceof ConnectiveP) {
-            final List<P<?>> list = ((ConnectiveP) p).getPredicates();
-            for (int i = 0; i < list.size(); i++) {
-                convertPToString(list.get(i), current);
-                if (i < list.size() - 1)
-                    current.append(p instanceof OrP ? ".or(" : ".and(");
+        protected String convertToString(final Object o) {
+
+            final Object object = customTypeTranslator.apply(o);
+
+            // an object that is Handled means that the "custom" TypeTranslator figured out how to convert the
+            // object to a string and it should be used as-is, otherwise it gets passed down the line through the normal
+            // process
+            if (object instanceof Handled)
+                return ((Handled) object).getTranslation();
+            else if (object instanceof Bytecode.Binding)
+                return ((Bytecode.Binding) object).variable();
+            else if (object instanceof Bytecode)
+                return internalTranslate("__", (Bytecode) object);
+            else if (object instanceof Traversal)
+                return convertToString(((Traversal) object).asAdmin().getBytecode());
+            else if (object instanceof String) {
+                return (((String) object).contains("\"") ? "\"\"\"" + StringEscapeUtils.escapeJava((String) object) + "\"\"\"" : "\"" + StringEscapeUtils.escapeJava((String) object) + "\"")
+                        .replace("$", "\\$");
+            } else if (object instanceof Set) {
+                final Set<String> set = new HashSet<>(((Set) object).size());
+                for (final Object item : (Set) object) {
+                    set.add(convertToString(item));
+                }
+                return set.toString() + " as Set";
+            } else if (object instanceof List) {
+                final List<String> list = new ArrayList<>(((List) object).size());
+                for (final Object item : (List) object) {
+                    list.add(convertToString(item));
+                }
+                return list.toString();
+            } else if (object instanceof Map) {
+                final StringBuilder map = new StringBuilder("[");
+                for (final Map.Entry<?, ?> entry : ((Map<?, ?>) object).entrySet()) {
+                    map.append("(").
+                            append(convertToString(entry.getKey())).
+                            append("):(").
+                            append(convertToString(entry.getValue())).
+                            append("),");
+                }
+
+                // only need to remove this last bit if entries were added
+                if (!((Map<?, ?>) object).isEmpty())
+                    map.deleteCharAt(map.length() - 1);
+
+                return map.append("]").toString();
+            } else if (object instanceof Long)
+                return object + "L";
+            else if (object instanceof Double)
+                return object + "d";
+            else if (object instanceof Float)
+                return object + "f";
+            else if (object instanceof Integer)
+                return "(int) " + object;
+            else if (object instanceof Class)
+                return ((Class) object).getCanonicalName();
+            else if (object instanceof Timestamp)
+                return "new java.sql.Timestamp(" + ((Timestamp) object).getTime() + ")";
+            else if (object instanceof Date)
+                return "new java.util.Date(" + ((Date) object).getTime() + ")";
+            else if (object instanceof UUID)
+                return "java.util.UUID.fromString('" + object.toString() + "')";
+            else if (object instanceof P)
+                return convertPToString((P) object, new StringBuilder()).toString();
+            else if (object instanceof SackFunctions.Barrier)
+                return "SackFunctions.Barrier." + object.toString();
+            else if (object instanceof VertexProperty.Cardinality)
+                return "VertexProperty.Cardinality." + object.toString();
+            else if (object instanceof TraversalOptionParent.Pick)
+                return "TraversalOptionParent.Pick." + object.toString();
+            else if (object instanceof Enum)
+                return ((Enum) object).getDeclaringClass().getSimpleName() + "." + object.toString();
+            else if (object instanceof Element) {
+                if (object instanceof Vertex) {
+                    final Vertex vertex = (Vertex) object;
+                    return "new org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex(" +
+                            convertToString(vertex.id()) + "," +
+                            convertToString(vertex.label()) + ", Collections.emptyMap())";
+                } else if (object instanceof Edge) {
+                    final Edge edge = (Edge) object;
+                    return "new org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge(" +
+                            convertToString(edge.id()) + "," +
+                            convertToString(edge.label()) + "," +
+                            "Collections.emptyMap()," +
+                            convertToString(edge.outVertex().id()) + "," +
+                            convertToString(edge.outVertex().label()) + "," +
+                            convertToString(edge.inVertex().id()) + "," +
+                            convertToString(edge.inVertex().label()) + ")";
+                } else {// VertexProperty
+                    final VertexProperty vertexProperty = (VertexProperty) object;
+                    return "new org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertexProperty(" +
+                            convertToString(vertexProperty.id()) + "," +
+                            convertToString(vertexProperty.label()) + "," +
+                            convertToString(vertexProperty.value()) + "," +
+                            "Collections.emptyMap()," +
+                            convertToString(vertexProperty.element()) + ")";
+                }
+            } else if (object instanceof Lambda) {
+                final String lambdaString = ((Lambda) object).getLambdaScript().trim();
+                return lambdaString.startsWith("{") ? lambdaString : "{" + lambdaString + "}";
+            } else if (object instanceof TraversalStrategyProxy) {
+                final TraversalStrategyProxy proxy = (TraversalStrategyProxy) object;
+                if (proxy.getConfiguration().isEmpty())
+                    return proxy.getStrategyClass().getCanonicalName() + ".instance()";
+                else
+                    return proxy.getStrategyClass().getCanonicalName() + ".create(new org.apache.commons.configuration.MapConfiguration(" + convertToString(ConfigurationConverter.getMap(proxy.getConfiguration())) + "))";
+            } else if (object instanceof TraversalStrategy) {
+                return convertToString(new TraversalStrategyProxy(((TraversalStrategy) object)));
+            } else
+                return null == object ? "null" : object.toString();
+        }
+
+        private String internalTranslate(final String start, final Bytecode bytecode) {
+            final StringBuilder traversalScript = new StringBuilder(start);
+            for (final Bytecode.Instruction instruction : bytecode.getInstructions()) {
+                final String methodName = instruction.getOperator();
+                if (0 == instruction.getArguments().length)
+                    traversalScript.append(".").append(methodName).append("()");
+                else {
+                    traversalScript.append(".");
+                    String temp = methodName + "(";
+                    for (final Object object : instruction.getArguments()) {
+                        temp = temp + convertToString(object) + ",";
+                    }
+                    traversalScript.append(temp.substring(0, temp.length() - 1)).append(")");
+                }
             }
-            current.append(")");
-        } else
-            current.append("P.").append(p.getBiPredicate().toString()).append("(").append(convertToString(p.getValue())).append(")");
-        return current;
-    }
+            return traversalScript.toString();
+        }
 
-    private StringBuilder convertTextPToString(final TextP p, final StringBuilder current) {
-        current.append("TextP.").append(p.getBiPredicate().toString()).append("(").append(convertToString(p.getValue())).append(")");
-        return current;
+        private StringBuilder convertPToString(final P p, final StringBuilder current) {
+            if (p instanceof TextP) return convertTextPToString((TextP) p, current);
+            if (p instanceof ConnectiveP) {
+                final List<P<?>> list = ((ConnectiveP) p).getPredicates();
+                for (int i = 0; i < list.size(); i++) {
+                    convertPToString(list.get(i), current);
+                    if (i < list.size() - 1)
+                        current.append(p instanceof OrP ? ".or(" : ".and(");
+                }
+                current.append(")");
+            } else
+                current.append("P.").append(p.getBiPredicate().toString()).append("(").append(convertToString(p.getValue())).append(")");
+            return current;
+        }
+
+        private StringBuilder convertTextPToString(final TextP p, final StringBuilder current) {
+            current.append("TextP.").append(p.getBiPredicate().toString()).append("(").append(convertToString(p.getValue())).append(")");
+            return current;
+        }
     }
 }
