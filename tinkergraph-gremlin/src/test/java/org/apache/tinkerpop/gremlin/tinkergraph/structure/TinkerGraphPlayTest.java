@@ -25,6 +25,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
+import org.apache.tinkerpop.gremlin.process.traversal.strategy.decoration.SubgraphStrategy;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.optimization.PathRetractionStrategy;
 import org.apache.tinkerpop.gremlin.structure.*;
 import org.apache.tinkerpop.gremlin.structure.io.IoTest;
@@ -123,92 +124,11 @@ public class TinkerGraphPlayTest {
     @Test
     @Ignore
     public void testPlayDK() throws Exception {
-
-        final Map<String, String> aliases = new HashMap<>();
-        aliases.put("marko","okram");
-        final GraphTraversalSource g = TinkerFactory.createModern().traversal();
-        /*g.withSideEffect("a", aliases).V().hasLabel("person").
-                values("name").as("n").
-                optional(select("a").select(select("n"))).
-                forEachRemaining(System.out::println);*/
-
-        // shortest path lengths (by summed weight)
-        g.withSack(0.0).V().has("person", "name", "marko").
-                repeat(__.bothE().
-                        sack(sum).
-                            by("weight").
-                        otherV().
-                        group("m").
-                            by().
-                            by(sack().min()).as("x").
-                        // where(P.eq("m")).by(sack()).by(select(select("x"))). // could be that easy, but "x" is unknown here
-                        filter(project("s","x").
-                                    by(sack()).
-                                    by(select("m").select(select("x"))).
-                                where("s", P.eq("x"))).
-                        group("p").
-                            by().
-                            by(project("path","length").
-                                    by(path().by("name").by("weight")).
-                                    by(sack()))
-                        ).
-                cap("p").unfold().
-                group().
-                    by(select(Column.keys).values("name")).
-                    by(Column.values).next().entrySet().
-                forEach(System.out::println);
-
-        System.out.println("---");
-
-        // longest path lengths (by summed weight)
-        g.withSack(0.0).V().has("person", "name", "marko").
-                repeat(__.bothE().simplePath().
-                        sack(sum).
-                          by("weight").
-                        otherV().
-                        group("m").
-                            by().
-                            by(sack().max()).as("x").
-                        filter(project("s","x").
-                                by(sack()).
-                                by(select("m").select(select("x"))).
-                                where("s", P.eq("x"))).
-                        group("p").
-                                by().
-                                by(project("path","length").
-                                        by(path().by("name").by("weight")).
-                                        by(sack()))
-                        ).
-                cap("p").unfold().
-                group().
-                    by(select(Column.keys).values("name")).
-                    by(Column.values).next().entrySet().
-                forEach(System.out::println);
-
-        System.out.println("---");
-
-        // all shortest paths (by summed weight)
-        g.withSack(0.0).V().as("a").
-                repeat(__.bothE().
-                        sack(sum).
-                            by("weight").
-                        otherV().as("b").
-                        group("m").
-                            by(select("a","b").by("name")).
-                            by(sack().min()).
-                        filter(project("s","x").
-                                by(sack()).
-                                by(select("m").select(select("a", "b").by("name"))).
-                               where("s", P.eq("x"))).
-                        group("p").
-                            by(select("a","b").by("name")).
-                            by(map(union(path().by("name").by("weight"), sack()).fold()))
-                ).
-                cap("p").unfold().
-                order().
-                    by(select(Column.keys).select("a")).
-                    by(select(Column.keys).select("b")).
-                forEachRemaining(System.out::println);
+        TinkerGraph graph = TinkerFactory.createTheCrew();
+        GraphTraversalSource g = graph.traversal();
+        GraphTraversalSource sg = g.withStrategies(
+                SubgraphStrategy.build().vertexProperties(hasNot("endTime")).create());
+        sg.V().valueMap().forEachRemaining(System.out::println);
     }
 
     @Test
