@@ -25,6 +25,7 @@ image::https://raw.githubusercontent.com/apache/tinkerpop/master/docs/static/ima
 
 This release also includes changes from <<release-3-2-11, 3.2.11>>.
 
+* Added `AnonymousTraversalSource` which provides a more unified means of constructing a `TraversalSource`.
 
 [[release-3-3-4]]
 === TinkerPop 3.3.4 (Release Date: October 15, 2018)
