@@ -254,11 +254,9 @@ module.exports = {
   IO,
   Traversal,
   TraversalSideEffects,
-  Traverser<%
-withOptions.each { option ->
-    out.print ",\n  " + option.name + ": " + "WithOption." + option.name
-}
-%><%
+  Traverser,
+  withOptions: WithOptions,
+  //withOptions: toEnum('WithOptions', '<%= withOptions.collect {it.name}.join(' ') %>')<%
 enums.each{ enumClass ->
     out.print ",\n  " + decapitalize.call(enumClass.simpleName) + ": toEnum('" + enumClass.simpleName + "', '" +
         enumClass.getEnumConstants().sort { a, b -> a.name() <=> b.name() }.collect { toJs.call(it.name()) }.join(' ') + "')"

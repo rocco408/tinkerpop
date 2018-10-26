@@ -97,7 +97,7 @@ Feature: Step - valueMap()
     Given the modern graph
     And the traversal of
       """
-      g.V().hasLabel("person").filter(__.outE("created")).valueMap().with(tokens)
+      g.V().hasLabel("person").filter(__.outE("created")).valueMap().with(WithOptions.tokens)
       """
     When iterated to list
     Then the result should be unordered
