@@ -215,6 +215,14 @@ class TraversalSideEffects {
 
 }
 
+class WithOptions {
+  constructor() {
+<% withOptions.each { %>
+    this.<%= it.name %> = <%= it.value %>;
+<% } %>
+  }
+}
+
 function toEnum(typeName, keys) {
   const result = {};
   keys.split(' ').forEach(k => {
@@ -242,10 +250,15 @@ module.exports = {
   EnumValue,
   P,
   TextP,
+  WithOptions,
   IO,
   Traversal,
   TraversalSideEffects,
   Traverser<%
+withOptions.each { option ->
+    out.print ",\n  " + option.name + ": " + "WithOption." + option.name
+}
+%><%
 enums.each{ enumClass ->
     out.print ",\n  " + decapitalize.call(enumClass.simpleName) + ": toEnum('" + enumClass.simpleName + "', '" +
         enumClass.getEnumConstants().sort { a, b -> a.name() <=> b.name() }.collect { toJs.call(it.name()) }.join(' ') + "')"

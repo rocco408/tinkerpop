@@ -19,8 +19,6 @@
 package org.apache.tinkerpop.gremlin.tinkergraph.structure;
 
 import org.apache.tinkerpop.gremlin.process.computer.Computer;
-import org.apache.tinkerpop.gremlin.process.traversal.IO;
-import org.apache.tinkerpop.gremlin.process.traversal.P;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
@@ -28,10 +26,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.decoration.SubgraphStrategy;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.optimization.PathRetractionStrategy;
 import org.apache.tinkerpop.gremlin.structure.*;
-import org.apache.tinkerpop.gremlin.structure.io.IoTest;
 import org.apache.tinkerpop.gremlin.structure.io.graphml.GraphMLIo;
-import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONReader;
-import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoReader;
 import org.apache.tinkerpop.gremlin.util.TimeUtil;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -39,15 +34,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.Operator.sum;
 import static org.apache.tinkerpop.gremlin.process.traversal.P.neq;
 import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.*;
+import static org.apache.tinkerpop.gremlin.process.traversal.step.util.WithOptions.*;
 
 /**
  * @author Stephen Mallette (http://stephen.genoprime.com)
@@ -125,10 +119,32 @@ public class TinkerGraphPlayTest {
     @Ignore
     public void testPlayDK() throws Exception {
         TinkerGraph graph = TinkerFactory.createTheCrew();
-        GraphTraversalSource g = graph.traversal();
-        GraphTraversalSource sg = g.withStrategies(
+        GraphTraversalSource g = graph.traversal().withStrategies(
                 SubgraphStrategy.build().vertexProperties(hasNot("endTime")).create());
-        sg.V().valueMap().forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()) ---");
+        g.V().valueMap().forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()) ---");
+        g.V().valueMap().by(unfold()).forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()).with(tokens) ---");
+        g.V().valueMap().by(unfold()).with(tokens).forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()).with(tokens, false) ---");
+        g.V().valueMap().by(unfold()).with(tokens, false).forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()).with(tokens, ids) ---");
+        g.V().valueMap().by(unfold()).with(tokens, ids).forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()).with(tokens, labels) ---");
+        g.V().valueMap().by(unfold()).with(tokens, labels).forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()).with(tokens, all) ---");
+        g.V().valueMap().by(unfold()).with(tokens, all).forEachRemaining(System.out::println);
+
+        System.out.println("\n--- valueMap().by(unfold()).with(tokens, ids | labels) ---");
+        g.V().valueMap().by(unfold()).with(tokens, ids | labels).forEachRemaining(System.out::println);
     }
 
     @Test

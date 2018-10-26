@@ -20,9 +20,11 @@ package org.apache.tinkerpop.gremlin.process.traversal.step.map;
 
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.Traverser;
-import org.apache.tinkerpop.gremlin.process.traversal.lambda.ElementValueTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.step.ByModulating;
+import org.apache.tinkerpop.gremlin.process.traversal.step.Configuring;
 import org.apache.tinkerpop.gremlin.process.traversal.step.TraversalParent;
+import org.apache.tinkerpop.gremlin.process.traversal.step.util.Parameters;
+import org.apache.tinkerpop.gremlin.process.traversal.step.util.WithOptions;
 import org.apache.tinkerpop.gremlin.process.traversal.traverser.TraverserRequirement;
 import org.apache.tinkerpop.gremlin.process.traversal.util.TraversalRing;
 import org.apache.tinkerpop.gremlin.process.traversal.util.TraversalUtil;
@@ -33,12 +35,9 @@ import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.structure.util.StringFactory;
-import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,18 +46,28 @@ import java.util.Set;
 
 /**
  * @author Marko A. Rodriguez (http://markorodriguez.com)
+ * @author Daniel Kuppitz (http://gremlin.guru)
  */
-public class PropertyMapStep<K,E> extends MapStep<Element, Map<K, E>> implements TraversalParent, ByModulating {
+public class PropertyMapStep<K,E> extends MapStep<Element, Map<K, E>>
+        implements TraversalParent, ByModulating, Configuring {
 
     protected final String[] propertyKeys;
     protected final PropertyType returnType;
-    protected final boolean includeTokens;
+
+    protected int tokens;
     protected Traversal.Admin<Element, ? extends Property> propertyTraversal;
+
+    private Parameters parameters = new Parameters();
     private TraversalRing<K, E> traversalRing;
 
+    @Deprecated
     public PropertyMapStep(final Traversal.Admin traversal, final boolean includeTokens, final PropertyType propertyType, final String... propertyKeys) {
+        this(traversal, propertyType, propertyKeys);
+        this.configure(WithOptions.tokens, includeTokens ? WithOptions.all : WithOptions.none);
+    }
+
+    public PropertyMapStep(final Traversal.Admin traversal, final PropertyType propertyType, final String... propertyKeys) {
         super(traversal);
-        this.includeTokens = includeTokens;
         this.propertyKeys = propertyKeys;
         this.returnType = propertyType;
         this.propertyTraversal = null;
@@ -70,13 +79,13 @@ public class PropertyMapStep<K,E> extends MapStep<Element, Map<K, E>> implements
         final Map<Object, Object> map = new LinkedHashMap<>();
         final Element element = traverser.get();
         final boolean isVertex = element instanceof Vertex;
-        if (this.returnType == PropertyType.VALUE && this.includeTokens) {
-            map.put(T.id, element.id());
+        if (this.returnType == PropertyType.VALUE) {
+            if (includeToken(WithOptions.ids)) map.put(T.id, element.id());
             if (element instanceof VertexProperty) {
-                map.put(T.key, ((VertexProperty<?>) element).key());
-                map.put(T.value, ((VertexProperty<?>) element).value());
+                if (includeToken(WithOptions.keys)) map.put(T.key, ((VertexProperty<?>) element).key());
+                if (includeToken(WithOptions.values)) map.put(T.value, ((VertexProperty<?>) element).value());
             } else {
-                map.put(T.label, element.label());
+                if (includeToken(WithOptions.labels)) map.put(T.label, element.label());
             }
         }
         final Iterator<? extends Property> properties = null == this.propertyTraversal ?
@@ -106,6 +115,29 @@ public class PropertyMapStep<K,E> extends MapStep<Element, Map<K, E>> implements
     }
 
     @Override
+    public void configure(final Object... keyValues) {
+        if (keyValues[0].equals(WithOptions.tokens)) {
+            if (keyValues.length == 2 && keyValues[1] instanceof Boolean) {
+                this.tokens = ((boolean) keyValues[1]) ? WithOptions.all : WithOptions.none;
+            } else {
+                for (int i = 1; i < keyValues.length; i++) {
+                    if (!(keyValues[i] instanceof Integer))
+                        throw new IllegalArgumentException("WithOptions.tokens requires Integer arguments (possible " + "" +
+                                "values are: WithOptions.[none|ids|labels|keys|values|all])");
+                    this.tokens |= (int) keyValues[i];
+                }
+            }
+        } else {
+            this.parameters.set(this, keyValues);
+        }
+    }
+
+    @Override
+    public Parameters getParameters() {
+        return parameters;
+    }
+
+    @Override
     public List<Traversal.Admin<K, E>> getLocalChildren() {
         final List<Traversal.Admin<K, E>> result = new ArrayList<>();
         if (null != this.propertyTraversal)
@@ -131,8 +163,9 @@ public class PropertyMapStep<K,E> extends MapStep<Element, Map<K, E>> implements
         return propertyKeys;
     }
 
+    @Deprecated
     public boolean isIncludeTokens() {
-        return includeTokens;
+        return this.tokens != WithOptions.none;
     }
 
     public String toString() {
@@ -150,7 +183,7 @@ public class PropertyMapStep<K,E> extends MapStep<Element, Map<K, E>> implements
 
     @Override
     public int hashCode() {
-        int result = super.hashCode() ^ this.returnType.hashCode() ^ Boolean.hashCode(this.includeTokens);
+        int result = super.hashCode() ^ this.returnType.hashCode() ^ Integer.hashCode(this.tokens);
         if (null != this.propertyTraversal)
             result ^= this.propertyTraversal.hashCode();
         for (final String propertyKey : this.propertyKeys) {
@@ -170,5 +203,13 @@ public class PropertyMapStep<K,E> extends MapStep<Element, Map<K, E>> implements
     @Override
     public Set<TraverserRequirement> getRequirements() {
         return this.getSelfAndChildRequirements(TraverserRequirement.OBJECT);
+    }
+
+    public int getIncludedTokens() {
+        return this.tokens;
+    }
+
+    private boolean includeToken(final int token) {
+        return 0 != (this.tokens & token);
     }
 }
