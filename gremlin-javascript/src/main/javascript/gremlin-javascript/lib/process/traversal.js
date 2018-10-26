@@ -440,7 +440,7 @@ module.exports = {
   Traversal,
   TraversalSideEffects,
   Traverser,
-  withOptions: WithOptions
+  withOptions: WithOptions,
   //withOptions: toEnum('WithOptions', 'tokens none ids labels keys values all'),
   barrier: toEnum('Barrier', 'normSack'),
   cardinality: toEnum('Cardinality', 'list set single'),
