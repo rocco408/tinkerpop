@@ -388,25 +388,15 @@ class TraversalSideEffects {
 
 }
 
-class WithOptions {
-  constructor() {
-
-    this.tokens = "~tinkerpop.valueMap.tokens";
-
-    this.none = 0;
-
-    this.ids = 1;
-
-    this.labels = 2;
-
-    this.keys = 4;
-
-    this.values = 8;
-
-    this.all = 15;
-
-  }
-}
+const withOptions = {
+  tokens: "~tinkerpop.valueMap.tokens",
+  none: 0,
+  ids: 1,
+  labels: 2,
+  keys: 4,
+  values: 8,
+  all: 15
+};
 
 function toEnum(typeName, keys) {
   const result = {};
@@ -435,13 +425,11 @@ module.exports = {
   EnumValue,
   P,
   TextP,
-  WithOptions,
+  withOptions,
   IO,
   Traversal,
   TraversalSideEffects,
   Traverser,
-  withOptions: WithOptions,
-  //withOptions: toEnum('WithOptions', 'tokens none ids labels keys values all'),
   barrier: toEnum('Barrier', 'normSack'),
   cardinality: toEnum('Cardinality', 'list set single'),
   column: toEnum('Column', 'keys values'),

@@ -72,7 +72,7 @@ module.exports = {
     GraphTraversalSource: gt.GraphTraversalSource,
     statics: gt.statics,
     Translator: Translator,
-    WithOptions: t.withOptions
+    withOptions: t.withOptions
   },
   structure: {
     io: {
